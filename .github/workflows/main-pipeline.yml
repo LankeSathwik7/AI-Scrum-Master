@@ -1,0 +1,65 @@
+name: Main Pipeline
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 9 * * *'  # Single daily trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+            
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: Run database migrations
+        run: python core/database.py
+        
+      - name: Run Predictions
+        env:
+          TRELLO_API_KEY: ${{ secrets.TRELLO_API_KEY }}
+          TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+        run: |
+          python -c "from models.risk_predictor import RiskPredictor; \
+            rp = RiskPredictor(); \
+            forecast = rp.predict_risk(); \
+            from core.database import Database; \
+            Database().save_prediction(forecast)"
+            
+      - name: Prioritize Tasks
+        run: |
+          python -c "from models.task_prioritizer import TaskPrioritizer; \
+            tp = TaskPrioritizer(); \
+            tasks = tp.prioritize(); \
+            from core.database import Database; \
+            Database().save_tasks(tasks)"
+            
+      - name: Run Tests
+        run: |
+          pytest tests/ -v
+          
+      - name: Deploy to Streamlit
+        if: success()
+        uses: streamlit/actions@v1
+        with:
+          cloud-url: ${{ secrets.STREAMLIT_CLOUD_URL }}
+          credentials: ${{ secrets.STREAMLIT_CREDENTIALS }}
+          main-file: "ui/dashboard.py"
+          branch: "main"
