@@ -77,11 +77,11 @@ class RiskPredictor:
         """Generate realistic sprint simulation data"""
         dates = pd.date_range(end=datetime.now(), periods=60, freq='D')
         np.random.seed(42)  # For reproducible results
-        base_pattern = 10 * np.sin(np.linspace(0, 4*np.pi, 60))  # 2-week cycle
+        base_pattern = 8 * np.sin(np.linspace(0, 4*np.pi, 60))  
         noise = np.random.normal(0, 2, 60)
         return pd.DataFrame({
             'ds': dates,
-            'y': np.clip(base_pattern + noise + 15, 0, None)  # Offset to prevent negative values
+            'y': np.clip(base_pattern + noise + 12, 0, None)  
         })
 
     def train(self):
@@ -129,8 +129,13 @@ if __name__ == "__main__":
     try:
         predictor = RiskPredictor()
         forecast = predictor.predict_risk()
-        print("SUCCESS! Risk Forecast:")
-        print(forecast.to_markdown(index=False))
+        
+        # Save to database
+        from core.database import Database
+        db = Database()
+        db.save_prediction(forecast[['ds', 'yhat', 'yhat_upper', 'risk', 'recommendation']])
+        
+        print("SUCCESS! Data saved to database")
     except Exception as e:
         logger.error(f"Critical failure: {str(e)}")
         exit(1)

@@ -75,29 +75,29 @@ def check_trello_connection():
         logger.error(f"Trello connection error: {str(e)}")
         return False
 
-def display_connection_status():
-    """Show API connection status"""
-    with st.expander("🔌 Connection Status", expanded=True):
-        cols = st.columns(3)
-        with cols[0]:
-            if check_trello_connection():
-                st.success("✅ Trello Connected")
-            else:
-                st.error("❌ Trello Connection Failed")
-        with cols[1]:
-            if check_slack_connection():
-                st.success("✅ Slack Connected")
-            else:
-                st.error("❌ Slack Connection Failed")
-        with cols[2]:
-            try:
-                db = Database()
-                if db.get_tasks() is not None:
-                    st.success("✅ Database Connected")
-                else:
-                    st.error("❌ Database Error")
-            except Exception as e:
-                st.error(f"❌ Database Error: {str(e)}")
+# def display_connection_status():
+#     """Show API connection status"""
+#     with st.expander("🔌 Connection Status", expanded=True):
+#         cols = st.columns(3)
+#         with cols[0]:
+#             if check_trello_connection():
+#                 st.success("✅ Trello Connected")
+#             else:
+#                 st.error("❌ Trello Connection Failed")
+#         with cols[1]:
+#             if check_slack_connection():
+#                 st.success("✅ Slack Connected")
+#             else:
+#                 st.error("❌ Slack Connection Failed")
+#         with cols[2]:
+#             try:
+#                 db = Database()
+#                 if db.get_tasks() is not None:
+#                     st.success("✅ Database Connected")
+#                 else:
+#                     st.error("❌ Database Error")
+#             except Exception as e:
+#                 st.error(f"❌ Database Error: {str(e)}")
 
 def show_blockers_section():
     """Display current blockers from Trello"""
@@ -149,10 +149,14 @@ def show_blockers_section():
 
 def show_analytics_section():
     """Display predictive analytics section"""
-    col1, col2 = st.columns([3, 1])
+    tab1, tab2 = st.tabs(["Risk Forecast", "Task Priorities"])
     
-    with col1:
+    with tab1:
         st.header("📈 Sprint Analytics", divider="blue")
+        db = Database()
+        actual_tasks = db.get_tasks()
+        st.caption(f"Total tasks in system: {len(actual_tasks)}")
+        
         try:
             predictor = RiskPredictor()
             forecast = predictor.predict_risk()
@@ -170,8 +174,9 @@ def show_analytics_section():
                 st.warning("No forecast data available")
         except Exception as e:
             st.error(f"Prediction failed: {str(e)}")
+            logger.exception("Analytics section error")
 
-    with col2:
+    with tab2:
         st.header("⚠️ Risk Alerts", divider="orange")
         if 'forecast' in locals() and not forecast.empty:
             try:
@@ -190,6 +195,14 @@ def show_analytics_section():
                 st.warning("Error processing risk data")
         else:
             st.warning("No risk predictions available")
+    
+    st_autorefresh(interval=60*1000, key="analytics_refresh")
+
+def show_capacity_planning():
+    st.header("Team Capacity")
+    db = Database()
+    capacity = db.get_team_capacity()  # New method to implement
+    st.bar_chart(capacity.set_index('member'))
 
 def show_team_insights():
     """Display team insights section"""
@@ -272,60 +285,130 @@ def main():
     """Main dashboard application"""
     try:
         st.set_page_config(page_title="AI Scrum Master", layout="wide")
-        st.write("Dashboard initialized")  # Debug 1
+        #st.write("Dashboard initialized")  # Debug 1
         
         st.title("🤖 AI Scrum Master Dashboard")
-        st.write("Title set")  # Debug 2
+        #st.write("Title set")  # Debug 2
         
-        display_connection_status()
-        st.write("Connection status displayed")  # Debug 3
+        #display_connection_status()
+        #st.write("Connection status displayed")  # Debug 3
         
         st_autorefresh(interval=5*60*1000, key="data_refresh")
-        st.write("Auto-refresh configured")  # Debug 4
+        #st.write("Auto-refresh configured")  # Debug 4
         
         show_blockers_section()
-        st.write("Blockers section loaded")  # Debug 5
+        #st.write("Blockers section loaded")  # Debug 5
         
         show_analytics_section() 
-        st.write("Analytics section loaded")  # Debug 6
+        #st.write("Analytics section loaded")  # Debug 6
         
         show_team_insights()
-        st.write("Team insights loaded")  # Debug 7
+        #st.write("Team insights loaded")  # Debug 7
 
         # Database sections
         db = Database()
         with st.container():
-            col1, col2 = st.columns(2)
-            with col1:
-                st.header("🚨 Risk Predictions")
+            st.header("📊 Data Insights", divider="rainbow")
+            
+            # Risk Predictions - Full width
+            st.subheader("Risk Predictions")
+            try:
                 forecast = db.get_predictions()
                 if not forecast.empty:
-                    fig = px.line(forecast, x='date', y='predicted_tasks',
-                                 title="Task Completion Forecast")
-                    st.plotly_chart(fig)
-            with col2:
-                st.header("📌 Task Priorities")
-                tasks = db.get_tasks()
+                    fig = px.line(forecast, x='ds', y='yhat_upper',
+                                title="Task Completion Forecast",
+                                height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning("No risk predictions available")
+            except Exception as e:
+                st.error(f"Failed to load predictions: {str(e)}")
+
+            # Task Priorities - Below risk predictions
+            st.subheader("Task Priorities")
+            try:
+                tasks = db.get_prioritized_tasks()
                 if not tasks.empty:
-                    st.dataframe(tasks[['title', 'due_date', 'priority']]
-                               .sort_values('priority', ascending=False)
-                               .head(10))
+                    # Improved table display
+                    st.dataframe(
+                        tasks,
+                        column_config={
+                            "title": "Task Name",
+                            "due_date": st.column_config.DateColumn(
+                                "Due Date",
+                                format="YYYY-MM-DD"
+                            ),
+                            "priority": st.column_config.ProgressColumn(
+                                "Priority Score",
+                                help="Task priority (0-1 scale)",
+                                format="%.2f",
+                                min_value=0,
+                                max_value=1,
+                            )
+                        },
+                        hide_index=True,
+                        height=400,
+                        use_container_width=True
+                    )
+                else:
+                    st.warning("No prioritized tasks available")
+            except Exception as e:
+                st.error(f"Failed to load tasks: {str(e)}")
 
         # Automation controls
         with st.expander("⚙️ Automation Settings"):
             cols = st.columns(3)
             with cols[0]:
                 if st.button("🔄 Trigger Standups"):
-                    # Add standup triggering logic
-                    pass
+                    with st.spinner("Initiating standups..."):
+                        try:
+                            from bots.slack_bot import trigger_daily_standup
+                            if trigger_daily_standup():
+                                st.success("Standups initiated successfully!")
+                            else:
+                                st.error("Failed to start standups")
+                        except Exception as e:
+                            st.error(f"Error: {str(e)}")
             with cols[1]:
                 if st.button("📊 Generate Report"):
-                    # Add report generation logic
-                    pass
+                    with st.spinner("Compiling report..."):
+                        try:
+                            from report_generator import create_sprint_report
+                            report = create_sprint_report()
+                            st.download_button(
+                                label="Download Report",
+                                data=report,
+                                file_name="sprint_report.md",
+                                mime="text/markdown"
+                            )
+                        except Exception as e:
+                            st.error(f"Error: {str(e)}")
             with cols[2]:
                 if st.button("🧼 Cleanup Board"):
-                    # Add cleanup logic
-                    pass
+                    with st.spinner("Cleaning up..."):
+                        try:
+                            from bots.trello_integration import archive_old_cards
+                            archived = archive_old_cards()
+                            st.success(f"Archived {archived} old cards")
+                        except Exception as e:
+                            st.error(f"Error: {str(e)}")
+    
+        st.markdown("""
+        <style>
+            .stDataFrame {
+                max-height: 500px;
+                overflow-y: auto;
+            }
+            .stPlotlyChart {
+                margin-bottom: 2rem;
+            }
+            .stMetric {
+                padding: 15px;
+                background: #f8f9fa;
+                border-radius: 10px;
+            }
+        </style>
+        """, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Critical error: {str(e)}")

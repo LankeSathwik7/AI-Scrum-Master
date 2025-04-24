@@ -37,19 +37,21 @@ jobs:
           TRELLO_API_KEY: ${{ secrets.TRELLO_API_KEY }}
           TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
         run: |
-          python -c "from models.risk_predictor import RiskPredictor; \
-            rp = RiskPredictor(); \
-            forecast = rp.predict_risk(); \
-            from core.database import Database; \
-            Database().save_prediction(forecast)"
+          python -c "from models.risk_predictor import RiskPredictor;
+            rp = RiskPredictor();
+            forecast = rp.predict_risk();
+            from core.database import Database;
+            db = Database();
+            db.save_prediction(forecast[['ds', 'yhat', 'yhat_upper', 'risk', 'recommendation']])"
             
       - name: Prioritize Tasks
         run: |
-          python -c "from models.task_prioritizer import TaskPrioritizer; \
-            tp = TaskPrioritizer(); \
-            tasks = tp.prioritize(); \
-            from core.database import Database; \
-            Database().save_tasks(tasks)"
+          python -c "from models.task_prioritizer import TaskPrioritizer;
+            tp = TaskPrioritizer();
+            tasks = tp.prioritize();
+            from core.database import Database;
+            db = Database();
+            db.save_tasks(tasks[['id', 'title', 'due_date', 'checklists', 'priority']])"
             
       - name: Run Tests
         run: |
@@ -57,9 +59,9 @@ jobs:
           
       - name: Deploy to Streamlit
         if: success()
-        uses: streamlit/actions@v1
+        uses: streamlit/app-deploy@v1
         with:
-          cloud-url: ${{ secrets.STREAMLIT_CLOUD_URL }}
+          cloud-name: "default"
           credentials: ${{ secrets.STREAMLIT_CREDENTIALS }}
-          main-file: "ui/dashboard.py"
+          app-file: "ui/dashboard.py"
           branch: "main"
