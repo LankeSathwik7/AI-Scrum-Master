@@ -205,6 +205,8 @@ The GitHub Actions workflow runs daily and:
 6. Runs tests
 7. Deploys to Streamlit dashboard
 
+**Note:** GitHub Actions have been disabled in this repository. The workflow file (`.github/workflows/main.yml`) is retained for reference only.
+
 ## 🔒 Security Features
 
 - Rate limiting for API endpoints
