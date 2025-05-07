@@ -130,6 +130,11 @@ class Database:
                                 if_exists='replace', index=False,
                                 dtype={'due_date': 'TIMESTAMP'})
                 logger.info(f"Saved {len(valid_tasks)} valid tasks")
+
+            required_columns = ['id', 'title', 'due_date', 'checklists', 'priority']
+            if not all(col in tasks.columns for col in required_columns):
+                missing = [col for col in required_columns if col not in tasks.columns]
+                raise ValueError(f"Missing columns: {missing}")
         except Exception as e:
             logger.error(f"Task save failed: {str(e)}")
             raise
